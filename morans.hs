@@ -1,6 +1,9 @@
 -- Requires files from http://yann.lecun.com/exdb/mnist/
 import Codec.Compression.GZip (decompress)
 import qualified Data.ByteString.Lazy as BS
+import System.Environment
+import System.Exit
+import System.IO
 import System.Random
 import Data.Ord
 
@@ -56,17 +59,34 @@ getY     s n = fromIntegral . fromEnum . (getLabel s n ==) <$> [0..9]
 render n = let s = " .:oO@" in s !! (fromIntegral n * length s `div` 256)
 
 main = do
+  as <- getArgs
   [trainI, trainL, testI, testL] <- mapM ((decompress  <$>) . BS.readFile)
     [ "train-images-idx3-ubyte.gz"
     , "train-labels-idx1-ubyte.gz"
     ,  "t10k-images-idx3-ubyte.gz"
     ,  "t10k-labels-idx1-ubyte.gz"
     ]
-  b <- newBrain [784, 30, 10]
+
+  when (as == ["samplesjs"]) $ do
+    putStr $ unlines
+      [ "var samples = " ++ show ((show . getImage testI) <$> [0..49]) ++ ";"
+      , "function random_sample() {"
+      , "  return samples[Math.floor(Math.random() * samples.length)];"
+      , "}"
+      ]
+    exitSuccess
+
+  hSetBuffering stderr LineBuffering
+  let
+    (pStr, pStrLn) = case as of
+      ["print"] -> (hPutStr stderr, hPutStrLn stderr)
+      _         -> (putStr, putStrLn)
+
   n <- (`mod` 10000) <$> randomIO
-  putStr . unlines $
+  pStr . unlines $
     take 28 $ take 28 <$> iterate (drop 28) (render <$> getImage testI n)
 
+  b <- newBrain [784, 30, 10]
   let
     example = getX testI n
     bs = scanl (foldl' (\b n -> learn (getX trainI n) (getY trainL n) b)) b [
@@ -78,11 +98,15 @@ main = do
     cute d score = show d ++ ": " ++ replicate (round $ 70 * min 1 score) '+'
     bestOf = fst . maximumBy (comparing snd) . zip [0..]
 
-  forM_ bs $ putStrLn . unlines . zipWith cute [0..9] . feed example
+  forM_ bs $ pStrLn . unlines . zipWith cute [0..9] . feed example
 
-  putStrLn $ "best guess: " ++ show (bestOf $ feed example smart)
+  pStrLn $ "best guess: " ++ show (bestOf $ feed example smart)
 
   let guesses = bestOf . (\n -> feed (getX testI n) smart) <$> [0..9999]
   let answers = getLabel testL <$> [0..9999]
-  putStrLn $ show (sum $ fromEnum <$> zipWith (==) guesses answers) ++
+  pStrLn $ show (sum $ fromEnum <$> zipWith (==) guesses answers) ++
     " / 10000"
+
+  case as of
+    ["print"] -> print smart
+    _         -> return ()

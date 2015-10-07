@@ -1,0 +1,9 @@
+See https://cs.stanford.edu/~blynn/haskell/brain.html
+
+To generate the JavaScript for digit.html:
+
+  $ ghc morans.hs
+  $ ghc tojs
+  $ hastec digit.hs  # For digit.js.
+  $ ./morans samplesjs > samples.js
+  $ ./morans print | ./tojs > brain.js

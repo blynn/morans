@@ -26,7 +26,7 @@ darken (xs, x, y) = let
   y0 = max 0 $ y - r
   x1 = min (lim - 1) $ x + r
   y1 = min (lim - 1) $ y + r
-  circle = [(div u sz + 28*div v sz, 16) |
+  circle = [(div u sz + 28*div v sz, 12) |
      u <- [x0..x1], v <- [y0..y1], let d2 = (u-x)^2 + (v-y)^2, d2 < r^2]
   in (elems $ accum (+) (listArray (0, 28^2 - 1) xs) circle, x, y)
 
@@ -50,7 +50,7 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
         (xs, x, y) <- readIORef xVar
         writeIORef xVar $ darken (xs, x, y)
         update
-      void $ setTimer (Once 50) penCheck
+        void $ setTimer (Once 50) penCheck
 
     guess = do
       (xs, _, _) <- readIORef xVar
@@ -71,6 +71,7 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
     if x < lim && y < lim then do
       writeIORef xVar $ darken (xs, x, y)
       writeIORef penVar True
+      void $ setTimer (Once 50) penCheck
       update
     else writeIORef xVar orig
 
@@ -85,16 +86,14 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
       writeIORef xVar $ darken (xs, x, y)
       update
 
-  _ <- clearButton `onEvent` Click $ \_ -> do
+  void $ clearButton `onEvent` Click $ \_ -> do
     writeIORef xVar (replicate 784 0, 0, 0)
     update
     void $ setProp message "innerHTML" ""
 
-  _ <- sampleButton `onEvent` Click $ \_ -> do
+  void $ sampleButton `onEvent` Click $ \_ -> do
     (_, x, y) <- readIORef xVar
     a <- jsSample
     writeIORef xVar (read a, x, y)
     update
     guess
-
-  penCheck

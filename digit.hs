@@ -14,17 +14,17 @@ foreign import ccall "random_sample" jsSample :: IO JSString
 sz = 4; lim = sz * 28
 
 darken (xs, x, y) = let
-  r = 5
+  r = 4
   x0 = max 0 $ x - r
   y0 = max 0 $ y - r
   x1 = min (lim - 1) $ x + r
   y1 = min (lim - 1) $ y + r
-  circle = [(div u sz + 28*(div v sz), 16) |
+  circle = [(div u sz + 28*div v sz, 16) |
      u <- [x0..x1], v <- [y0..y1], let d2 = (u-x)^2 + (v-y)^2, d2 < r^2]
   in (elems $ accum (+) (listArray (0, 28^2 - 1) xs) circle, x, y)
 
-main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
-    \[cElem, message, clearButton, sampleButton, goButton] -> do
+main = withElems ["canvas", "message", "clearB", "sampleB"] $
+    \[cElem, message, clearButton, sampleButton] -> do
   Just canvas <- getCanvas cElem
   xVar <- newMVar (replicate 784 0, 0, 0)
   penVar <- newMVar False
@@ -49,11 +49,16 @@ main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
       (xs, _, _) <- readMVar xVar
       a <- jsThink $ toJSString $ show $ ((/ 256) . fromIntegral) <$> xs
       let
-        ys = read $ show a :: [Float]
-        best = fst . maximumBy (comparing snd) . zip [0..] $ ys
-      void $ setProp message "innerHTML" $ "best guess: " ++ show best
+        scores = zip [0..] (read $ show a :: [Float])
+        best = fst . maximumBy (comparing snd) $ scores
+      void $ setProp message "innerHTML" $ "best guess: " ++ show best ++
+        "\n<pre>\n" ++
+        unlines (map (\(d, y) -> show d ++ ": " ++ replicate (round $ 16 * y) '━') scores) ++
+        "</pre>\n"
 
-  _ <- cElem `onEvent` OnMouseDown $ \_ (x, y) -> do
+  set cElem [style "cursor" =: "crosshair"]
+
+  cElem `onEvent` OnMouseDown $ \_ (x, y) -> do
     orig@(xs, _, _) <- takeMVar xVar
     if x < lim && y < lim then do
       putMVar xVar $ darken (xs, x, y)
@@ -61,9 +66,9 @@ main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
       update
     else putMVar xVar orig
 
-  _ <- cElem `onEvent` OnMouseUp $ \_ _ -> void $ swapMVar penVar False
+  _ <- cElem `onEvent` OnMouseUp $ \_ _ -> swapMVar penVar False >> guess
 
-  _ <- cElem `onEvent` OnMouseOut $ void $ swapMVar penVar False
+  _ <- cElem `onEvent` OnMouseOut $ swapMVar penVar False >> guess
 
   _ <- cElem `onEvent` OnMouseMove $ \(x, y) -> do
     pen <- readMVar penVar
@@ -83,7 +88,5 @@ main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
     putMVar xVar (read $ show a, x, y)
     update
     guess
-
-  _ <- goButton `onEvent` OnClick $ \_ _ -> guess
 
   penCheck

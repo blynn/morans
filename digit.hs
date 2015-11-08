@@ -1,6 +1,7 @@
 import Control.Concurrent.MVar
 import Control.Applicative
 import Control.Monad
+import Data.Array
 import Data.List
 import Data.Ord
 import Haste
@@ -12,8 +13,15 @@ foreign import ccall "random_sample" jsSample :: IO JSString
 
 sz = 4; lim = sz * 28
 
-darken (xs, x, y) = let (as, b:bs) = splitAt (x + 28*y) xs in
-  (as ++ (min 255 (b + 85):bs), x, y)
+darken (xs, x, y) = let
+  r = 5
+  x0 = max 0 $ x - r
+  y0 = max 0 $ y - r
+  x1 = min (lim - 1) $ x + r
+  y1 = min (lim - 1) $ y + r
+  circle = [(div u sz + 28*(div v sz), 16) |
+     u <- [x0..x1], v <- [y0..y1], let d2 = (u-x)^2 + (v-y)^2, d2 < r^2]
+  in (elems $ accum (+) (listArray (0, 28^2 - 1) xs) circle, x, y)
 
 main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
     \[cElem, message, clearButton, sampleButton, goButton] -> do
@@ -34,6 +42,7 @@ main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
       when pen $ do
         (xs, x, y) <- takeMVar xVar
         putMVar xVar $ darken (xs, x, y)
+        update
       setTimeout 50 penCheck
 
     guess = do
@@ -47,9 +56,8 @@ main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
   _ <- cElem `onEvent` OnMouseDown $ \_ (x, y) -> do
     orig@(xs, _, _) <- takeMVar xVar
     if x < lim && y < lim then do
-      putMVar xVar $ darken (xs, x `div` sz, y `div` sz)
+      putMVar xVar $ darken (xs, x, y)
       swapMVar penVar True
-
       update
     else putMVar xVar orig
 
@@ -61,7 +69,7 @@ main = withElems ["canvas", "message", "clearB", "sampleB", "goB"] $
     pen <- readMVar penVar
     when (pen && x < lim && y < lim) $ do
       (xs, _, _) <- takeMVar xVar
-      putMVar xVar $ darken (xs, x `div` sz, y `div` sz)
+      putMVar xVar $ darken (xs, x, y)
       update
 
   _ <- clearButton `onEvent` OnClick $ \_ _ -> do

@@ -48,7 +48,7 @@ descend av dv = zipWith (-) av ((eta *) <$> dv)
 
 learn xv yv layers = let (avs, dvs) = deltas xv yv layers
   in zip (zipWith descend (fst <$> layers) dvs) $
-    zipWith3 (\wvs av dv -> zipWith (\wv d -> descend wv ((d*) <$> av)) wvs dv) 
+    zipWith3 (\wvs av dv -> zipWith (\wv d -> descend wv ((d*) <$> av)) wvs dv)
       (snd <$> layers) avs dvs
 
 getImage s n = fromIntegral . BS.index s . (n*28^2 + 16 +) <$> [0..28^2 - 1]

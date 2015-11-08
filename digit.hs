@@ -1,15 +1,22 @@
-import Control.Concurrent.MVar
+{-# LANGUAGE OverloadedStrings #-}
+
 import Control.Applicative
 import Control.Monad
 import Data.Array
+import Data.IORef
 import Data.List
 import Data.Ord
 import Haste
-import Haste.Graphics.Canvas
+import Haste.DOM
+import Haste.Events
 import Haste.Foreign
+import Haste.Graphics.Canvas
 
-foreign import ccall "think" jsThink :: JSString -> IO JSString
-foreign import ccall "random_sample" jsSample :: IO JSString
+jsThink :: String -> IO String
+jsThink = ffi "think"
+
+jsSample :: IO String
+jsSample = ffi "random_sample"
 
 sz = 4; lim = sz * 28
 
@@ -26,30 +33,30 @@ darken (xs, x, y) = let
 main = withElems ["canvas", "message", "clearB", "sampleB"] $
     \[cElem, message, clearButton, sampleButton] -> do
   Just canvas <- getCanvas cElem
-  xVar <- newMVar (replicate 784 0, 0, 0)
-  penVar <- newMVar False
+  xVar <- newIORef (replicate 784 0, 0, 0)
+  penVar <- newIORef False
 
   let
     box n (y, x) = let m = 255 - n in color (RGB m m m) $ fill $ rect (fromIntegral (x*sz), fromIntegral (y*sz)) (fromIntegral (x*sz + sz), fromIntegral (y*sz + sz))
 
     update = do
-      (xs, _, _) <- readMVar xVar
+      (xs, _, _) <- readIORef xVar
       render canvas $ zipWithM box xs $ (,) <$> [0..27] <*> [0..27]
       return ()
 
     penCheck = do
-      pen <- readMVar penVar
+      pen <- readIORef penVar
       when pen $ do
-        (xs, x, y) <- takeMVar xVar
-        putMVar xVar $ darken (xs, x, y)
+        (xs, x, y) <- readIORef xVar
+        writeIORef xVar $ darken (xs, x, y)
         update
-      setTimeout 50 penCheck
+      void $ setTimer (Once 50) penCheck
 
     guess = do
-      (xs, _, _) <- readMVar xVar
-      a <- jsThink $ toJSString $ show $ ((/ 256) . fromIntegral) <$> xs
+      (xs, _, _) <- readIORef xVar
+      a <- jsThink $ show $ ((/ 256) . fromIntegral) <$> xs
       let
-        scores = zip [0..] (read $ show a :: [Float])
+        scores = zip [0..] (read a :: [Float])
         best = fst . maximumBy (comparing snd) $ scores
       void $ setProp message "innerHTML" $ "best guess: " ++ show best ++
         "\n<pre>\n" ++
@@ -58,34 +65,35 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
 
   set cElem [style "cursor" =: "crosshair"]
 
-  cElem `onEvent` OnMouseDown $ \_ (x, y) -> do
-    orig@(xs, _, _) <- takeMVar xVar
+  cElem `onEvent` MouseDown $ \(MouseData (x, y) _ _) -> do
+    preventDefault
+    orig@(xs, _, _) <- readIORef xVar
     if x < lim && y < lim then do
-      putMVar xVar $ darken (xs, x, y)
-      swapMVar penVar True
+      writeIORef xVar $ darken (xs, x, y)
+      writeIORef penVar True
       update
-    else putMVar xVar orig
+    else writeIORef xVar orig
 
-  _ <- cElem `onEvent` OnMouseUp $ \_ _ -> swapMVar penVar False >> guess
+  _ <- cElem `onEvent` MouseUp $ \_ -> writeIORef penVar False >> guess
 
-  _ <- cElem `onEvent` OnMouseOut $ swapMVar penVar False >> guess
+  _ <- cElem `onEvent` MouseOut $ \_ -> writeIORef penVar False >> guess
 
-  _ <- cElem `onEvent` OnMouseMove $ \(x, y) -> do
-    pen <- readMVar penVar
+  _ <- cElem `onEvent` MouseMove $ \(MouseData (x, y) _ _) -> do
+    pen <- readIORef penVar
     when (pen && x < lim && y < lim) $ do
-      (xs, _, _) <- takeMVar xVar
-      putMVar xVar $ darken (xs, x, y)
+      (xs, _, _) <- readIORef xVar
+      writeIORef xVar $ darken (xs, x, y)
       update
 
-  _ <- clearButton `onEvent` OnClick $ \_ _ -> do
-    swapMVar xVar (replicate 784 0, 0, 0)
+  _ <- clearButton `onEvent` Click $ \_ -> do
+    writeIORef xVar (replicate 784 0, 0, 0)
     update
     void $ setProp message "innerHTML" ""
 
-  _ <- sampleButton `onEvent` OnClick $ \_ _ -> do
-    (_, x, y) <- takeMVar xVar
+  _ <- sampleButton `onEvent` Click $ \_ -> do
+    (_, x, y) <- readIORef xVar
     a <- jsSample
-    putMVar xVar (read $ show a, x, y)
+    writeIORef xVar (read a, x, y)
     update
     guess
 

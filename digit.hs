@@ -30,8 +30,8 @@ darken (xs, x, y) = let
      u <- [x0..x1], v <- [y0..y1], let d2 = (u-x)^2 + (v-y)^2, d2 < r^2]
   in (elems $ accum (+) (listArray (0, 28^2 - 1) xs) circle, x, y)
 
-main = withElems ["canvas", "message", "clearB", "sampleB"] $
-    \[cElem, message, clearButton, sampleButton] -> do
+main = withElems ["canvas", "guess", "graph", "clearB", "sampleB"] $
+    \[cElem, guessElem, graphElem, clearButton, sampleButton] -> do
   Just canvas <- getCanvas cElem
   xVar <- newIORef (replicate 784 0, 0, 0)
   penVar <- newIORef False
@@ -58,8 +58,8 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
       let
         scores = zip [0..] (read a :: [Float])
         best = fst . maximumBy (comparing snd) $ scores
-      void $ setProp message "innerHTML" $ "best guess: " ++ show best ++
-        "\n<pre>\n" ++
+      void $ setProp guessElem "innerHTML" $ "best guess: " ++ show best
+      void $ setProp graphElem "innerHTML" $ "<pre>\n" ++
         unlines (map (\(d, y) -> show d ++ ": " ++ replicate (round $ 16 * y) '━') scores) ++
         "</pre>\n"
 
@@ -89,7 +89,9 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
   void $ clearButton `onEvent` Click $ \_ -> do
     writeIORef xVar (replicate 784 0, 0, 0)
     update
-    void $ setProp message "innerHTML" ""
+    void $ setProp guessElem "innerHTML" ""
+    void $ setProp graphElem "innerHTML" ""
+    guess
 
   void $ sampleButton `onEvent` Click $ \_ -> do
     (_, x, y) <- readIORef xVar
@@ -97,3 +99,5 @@ main = withElems ["canvas", "message", "clearB", "sampleB"] $
     writeIORef xVar (read a, x, y)
     update
     guess
+
+  guess
